@@ -21,9 +21,8 @@ def mark_job_as_sent(job_url):
     with open(HISTORY_FILE, "a", encoding="utf-8") as f:
         f.write(job_url + "\n")
 
-def fetch_from_sarkari_result_cm():
+def fetch_from_sarkari_result_cm(sent_jobs):
     url = "https://sarkariresult.com.cm/"
-    sent_jobs = load_sent_jobs()
     try:
         res = requests.get(url, headers=HEADERS, timeout=15)
         soup = BeautifulSoup(res.content, "html.parser")
@@ -32,11 +31,11 @@ def fetch_from_sarkari_result_cm():
             title = a.get_text(strip=True)
             link = a["href"].strip()
             
-            if len(title) > 8:
+            if len(title) > 10:
                 if not link.startswith("http"):
                     link = "https://sarkariresult.com.cm" + ("/" if not link.startswith("/") else "") + link
                 
-                if link not in sent_jobs and "sarkariresult.com.cm" in link:
+                if link not in sent_jobs:
                     return {
                         "title": title,
                         "url": link,
@@ -46,9 +45,8 @@ def fetch_from_sarkari_result_cm():
         print(f"Error fetching from Sarkari Result: {e}")
     return None
 
-def fetch_from_freejobalert():
+def fetch_from_freejobalert(sent_jobs):
     url = "https://www.freejobalert.com/"
-    sent_jobs = load_sent_jobs()
     try:
         res = requests.get(url, headers=HEADERS, timeout=15)
         soup = BeautifulSoup(res.content, "html.parser")
@@ -57,11 +55,11 @@ def fetch_from_freejobalert():
             title = a.get_text(strip=True)
             link = a["href"].strip()
             
-            if len(title) > 8:
+            if len(title) > 10:
                 if not link.startswith("http"):
                     link = "https://www.freejobalert.com" + ("/" if not link.startswith("/") else "") + link
                 
-                if link not in sent_jobs and "freejobalert.com" in link:
+                if link not in sent_jobs:
                     return {
                         "title": title,
                         "url": link,
@@ -72,9 +70,10 @@ def fetch_from_freejobalert():
     return None
 
 def get_job():
-    job = fetch_from_sarkari_result_cm()
+    sent_jobs = load_sent_jobs()
+    job = fetch_from_sarkari_result_cm(sent_jobs)
     if not job:
-        job = fetch_from_freejobalert()
+        job = fetch_from_freejobalert(sent_jobs)
     return job
 
 def send_to_telegram(job):
@@ -83,7 +82,7 @@ def send_to_telegram(job):
 🔹 <b>पद/भर्ती का नाम:</b> {job['title']}
 📌 <b>अपडेट स्रोत:</b> {job['source']}
 
-🌐 <b>ऑनलाइन अप्लाई करने और नोटिफिकेशन डाउनलोड करने के लिए नीचे दिए गए लिंक पर क्लिक करें:</b>
+🌐 <b>ऑनलाइन अप्लाई करने और पूरी डिटेल के लिए नीचे क्लिक करें:</b>
 👇👇👇
 👉 <a href="{job['url']}">ऑनलाइन अप्लाई और पूरी डिटेल लिंक</a>
 👉 <a href="https://sarkariresult.com.cm/">Sarkari Result Portal</a>
@@ -118,3 +117,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    
