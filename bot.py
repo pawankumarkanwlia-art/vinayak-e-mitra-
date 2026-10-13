@@ -1,0 +1,124 @@
+import os
+import re
+import requests
+from bs4 import BeautifulSoup
+
+HISTORY_FILE = "sent_jobs.txt"
+
+BOT_TOKEN = "8975425344:AAGASvNX15Wa6YweF1A-CrWTakY5io7JSSY"
+CHAT_ID = "@divyacybercafe"
+
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+}
+
+def load_sent_jobs():
+    if not os.path.exists(HISTORY_FILE):
+        return set()
+    with open(HISTORY_FILE, "r", encoding="utf-8") as f:
+        return set(line.strip() for line in f if line.strip())
+
+def mark_job_as_sent(job_url):
+    with open(HISTORY_FILE, "a", encoding="utf-8") as f:
+        f.write(job_url + "\n")
+
+def fetch_from_sarkari_result_cm():
+    url = "https://sarkariresult.com.cm/"
+    sent_jobs = load_sent_jobs()
+    try:
+        res = requests.get(url, headers=HEADERS, timeout=15)
+        soup = BeautifulSoup(res.content, "html.parser")
+
+        for a in soup.find_all("a", href=True):
+            title = a.get_text(strip=True)
+            link = a["href"].strip()
+
+            if len(title) > 12 and any(k in title.lower() for k in ["online form", "recruitment", "vacancy", "apply"]):
+                if not link.startswith("http"):
+                    link = "https://sarkariresult.com.cm" + ("/" if not link.startswith("/") else "") + link
+
+                if link not in sent_jobs:
+                    return {
+                        "title": title,
+                        "url": link,
+                        "source": "SarkariResult.com.cm"
+                    }
+    except Exception as e:
+        print(f"Error fetching from Sarkari Result: {e}")
+    return None
+
+def fetch_from_freejobalert():
+    url = "https://www.freejobalert.com/"
+    sent_jobs = load_sent_jobs()
+    try:
+        res = requests.get(url, headers=HEADERS, timeout=15)
+        soup = BeautifulSoup(res.content, "html.parser")
+
+        for a in soup.find_all("a", href=True):
+            title = a.get_text(strip=True)
+            link = a["href"].strip()
+
+            if len(title) > 12 and any(k in title.lower() for k in ["posts", "recruitment", "apply online", "bharti"]):
+                if not link.startswith("http"):
+                    link = "https://www.freejobalert.com" + ("/" if not link.startswith("/") else "") + link
+
+                if link not in sent_jobs:
+                    return {
+                        "title": title,
+                        "url": link,
+                        "source": "FreeJobAlert.com"
+                    }
+    except Exception as e:
+        print(f"Error fetching from FreeJobAlert: {e}")
+    return None
+
+def get_job():
+    job = fetch_from_sarkari_result_cm()
+    if not job:
+        job = fetch_from_freejobalert()
+    return job
+
+def send_to_telegram(job):
+    message_text = f"""📣 <b>NEW JOB ALERT: सरकारी नौकरी की बड़ी भर्ती!</b> 📣
+Latest Government Job Vacancy 2026 की पूरी जानकारी नीचे दी गई है। अगर आप योग्य हैं, तो आज ही अप्लाई करें!
+
+🔹 <b>पद/भर्ती का नाम (Post Name):</b> {job['title']}
+📌 <b>अपडेट स्रोत (Source):</b> {job['source']}
+🎓 <b>योग्यता (Eligibility):</b> 10th / 12th / Graduate / Diploma (पदों के अनुसार)
+💰 <b>वेतन (Salary):</b> नियमानुसार पे-स्केल (Notification देखें)
+👤 <b>आयु सीमा (Age Limit):</b> नियमों के अनुसार छूट उपलब्ध
+
+🌐 <b>ऑनलाइन अप्लाई करने और नोटिफिकेशन डाउनलोड करने के लिए नीचे दिए गए लिंक पर क्लिक करें:</b>
+👇👇👇
+👉 <a href="{job['url']}">ऑनलाइन अप्लाई और पूरी डिटेल लिंक</a>
+👉 <a href="https://sarkariresult.com.cm/">Sarkari Result Portal</a>
+👉 <a href="https://www.freejobalert.com/">FreeJobAlert Portal</a>"""
+
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    payload = {
+        "chat_id": CHAT_ID,
+        "text": message_text,
+        "parse_mode": "HTML",
+        "disable_web_page_preview": False
+    }
+
+    resp = requests.post(url, json=payload)
+    print("Telegram Response:", resp.status_code, resp.text)
+    return resp.status_code == 200
+
+def main():
+    job = get_job()
+    if not job:
+        print("दोनों वेबसाइटों पर कोई नई अनपोस्टेड जॉब नहीं मिली।")
+        return
+
+    print(f"नई जॉब मिली [{job['source']}]: {job['title']}")
+    success = send_to_telegram(job)
+    if success:
+        mark_job_as_sent(job['url'])
+        print("सफलतापूर्वक Telegram चैनल पर पोस्ट हो गया!")
+    else:
+        print("Telegram पर भेजने में एरर आया।")
+
+if __name__ == "__main__":
+    main()
