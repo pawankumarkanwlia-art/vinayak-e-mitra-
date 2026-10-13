@@ -1,5 +1,4 @@
 import os
-import re
 import requests
 from bs4 import BeautifulSoup
 
@@ -28,16 +27,16 @@ def fetch_from_sarkari_result_cm():
     try:
         res = requests.get(url, headers=HEADERS, timeout=15)
         soup = BeautifulSoup(res.content, "html.parser")
-
+        
         for a in soup.find_all("a", href=True):
             title = a.get_text(strip=True)
             link = a["href"].strip()
-
-            if len(title) > 12 and any(k in title.lower() for k in ["online form", "recruitment", "vacancy", "apply"]):
+            
+            if len(title) > 8:
                 if not link.startswith("http"):
                     link = "https://sarkariresult.com.cm" + ("/" if not link.startswith("/") else "") + link
-
-                if link not in sent_jobs:
+                
+                if link not in sent_jobs and "sarkariresult.com.cm" in link:
                     return {
                         "title": title,
                         "url": link,
@@ -53,16 +52,16 @@ def fetch_from_freejobalert():
     try:
         res = requests.get(url, headers=HEADERS, timeout=15)
         soup = BeautifulSoup(res.content, "html.parser")
-
+        
         for a in soup.find_all("a", href=True):
             title = a.get_text(strip=True)
             link = a["href"].strip()
-
-            if len(title) > 12 and any(k in title.lower() for k in ["posts", "recruitment", "apply online", "bharti"]):
+            
+            if len(title) > 8:
                 if not link.startswith("http"):
                     link = "https://www.freejobalert.com" + ("/" if not link.startswith("/") else "") + link
-
-                if link not in sent_jobs:
+                
+                if link not in sent_jobs and "freejobalert.com" in link:
                     return {
                         "title": title,
                         "url": link,
@@ -80,13 +79,9 @@ def get_job():
 
 def send_to_telegram(job):
     message_text = f"""📣 <b>NEW JOB ALERT: सरकारी नौकरी की बड़ी भर्ती!</b> 📣
-Latest Government Job Vacancy 2026 की पूरी जानकारी नीचे दी गई है। अगर आप योग्य हैं, तो आज ही अप्लाई करें!
 
-🔹 <b>पद/भर्ती का नाम (Post Name):</b> {job['title']}
-📌 <b>अपडेट स्रोत (Source):</b> {job['source']}
-🎓 <b>योग्यता (Eligibility):</b> 10th / 12th / Graduate / Diploma (पदों के अनुसार)
-💰 <b>वेतन (Salary):</b> नियमानुसार पे-स्केल (Notification देखें)
-👤 <b>आयु सीमा (Age Limit):</b> नियमों के अनुसार छूट उपलब्ध
+🔹 <b>पद/भर्ती का नाम:</b> {job['title']}
+📌 <b>अपडेट स्रोत:</b> {job['source']}
 
 🌐 <b>ऑनलाइन अप्लाई करने और नोटिफिकेशन डाउनलोड करने के लिए नीचे दिए गए लिंक पर क्लिक करें:</b>
 👇👇👇
@@ -101,9 +96,10 @@ Latest Government Job Vacancy 2026 की पूरी जानकारी न
         "parse_mode": "HTML",
         "disable_web_page_preview": False
     }
-
+    
     resp = requests.post(url, json=payload)
-    print("Telegram Response:", resp.status_code, resp.text)
+    print("Telegram Response Status:", resp.status_code)
+    print("Telegram Response Text:", resp.text)
     return resp.status_code == 200
 
 def main():
@@ -111,7 +107,7 @@ def main():
     if not job:
         print("दोनों वेबसाइटों पर कोई नई अनपोस्टेड जॉब नहीं मिली।")
         return
-
+        
     print(f"नई जॉब मिली [{job['source']}]: {job['title']}")
     success = send_to_telegram(job)
     if success:
