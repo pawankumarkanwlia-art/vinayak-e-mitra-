@@ -117,5 +117,5 @@ def main():
 
 if __name__ == "__main__":
     main()
-  send_telegram_message("🤖 Telegram Bot Test Successful!")
+  
   
