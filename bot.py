@@ -8,7 +8,7 @@ BOT_TOKEN = os.environ["8975425344:AAGudyiytDx_ftxIdW64KjLeOSRnjf_WUfI"]
 CHAT_ID = "@divyacybercafe"
 
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                                            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 }
 
 def load_sent_jobs():
