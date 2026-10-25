@@ -1,121 +1,180 @@
+
 import os
 import requests
 from bs4 import BeautifulSoup
+from urllib.parse import urljoin, urldefrag
+from html import escape
 
 HISTORY_FILE = "sent_jobs.txt"
-
-BOT_TOKEN = os.environ["8975425344:AAGAZXxNazK_KMlIv1g88IV0RkKFyQ6UfrE"]
+BOT_TOKEN = os.environ["BOT_TOKEN"]
 CHAT_ID = "@divyacybercafe"
 
 HEADERS = {
-                                            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/120.0.0.0 Safari/537.36"
+    )
 }
+
+SOURCES = [
+    {
+        "name": "SarkariResult.com.cm",
+        "url": "https://sarkariresult.com.cm/",
+    },
+    {
+        "name": "FreeJobAlert.com",
+        "url": "https://www.freejobalert.com/",
+    },
+]
+
+KEYWORDS = (
+    "recruitment", "vacancy", "vacancies", "apply online",
+    "admit card", "result", "answer key", "government job",
+    "सरकारी नौकरी", "भर्ती", "रिक्ति", "आवेदन",
+    "प्रवेश पत्र", "उत्तर कुंजी",
+)
+
 
 def load_sent_jobs():
     if not os.path.exists(HISTORY_FILE):
         return set()
-    with open(HISTORY_FILE, "r", encoding="utf-8") as f:
-        return set(line.strip() for line in f if line.strip())
 
-def mark_job_as_sent(job_url):
-    with open(HISTORY_FILE, "a", encoding="utf-8") as f:
-        f.write(job_url + "\n")
+    with open(HISTORY_FILE, "r", encoding="utf-8") as file:
+        return {line.strip() for line in file if line.strip()}
 
-def fetch_from_sarkari_result_cm(sent_jobs):
-    url = "https://sarkariresult.com.cm/"
+
+def mark_job_as_sent(url):
+    with open(HISTORY_FILE, "a", encoding="utf-8") as file:
+        file.write(url + "\n")
+
+
+def fetch_jobs(source, sent_jobs):
+    jobs = []
+
     try:
-        res = requests.get(url, headers=HEADERS, timeout=15)
-        soup = BeautifulSoup(res.content, "html.parser")
-        
-        for a in soup.find_all("a", href=True):
-            title = a.get_text(strip=True)
-            link = a["href"].strip()
-            
-            if len(title) > 10:
-                if not link.startswith("http"):
-                    link = "https://sarkariresult.com.cm" + ("/" if not link.startswith("/") else "") + link
-                
-                if link not in sent_jobs:
-                    return {
-                        "title": title,
-                        "url": link,
-                        "source": "SarkariResult.com.cm"
-                    }
-    except Exception as e:
-        print(f"Error fetching from Sarkari Result: {e}")
-    return None
+        response = requests.get(
+            source["url"],
+            headers=HEADERS,
+            timeout=20,
+        )
+        response.raise_for_status()
 
-def fetch_from_freejobalert(sent_jobs):
-    url = "https://www.freejobalert.com/"
-    try:
-        res = requests.get(url, headers=HEADERS, timeout=15)
-        soup = BeautifulSoup(res.content, "html.parser")
-        
-        for a in soup.find_all("a", href=True):
-            title = a.get_text(strip=True)
-            link = a["href"].strip()
-            
-            if len(title) > 10:
-                if not link.startswith("http"):
-                    link = "https://www.freejobalert.com" + ("/" if not link.startswith("/") else "") + link
-                
-                if link not in sent_jobs:
-                    return {
-                        "title": title,
-                        "url": link,
-                        "source": "FreeJobAlert.com"
-                    }
-    except Exception as e:
-        print(f"Error fetching from FreeJobAlert: {e}")
-    return None
+        soup = BeautifulSoup(response.content, "html.parser")
+
+        for anchor in soup.find_all("a", href=True):
+            title = " ".join(anchor.get_text(" ", strip=True).split())
+            link = urljoin(source["url"], anchor["href"].strip())
+            link, _ = urldefrag(link)
+
+            if len(title) < 12:
+                continue
+
+            if not any(
+                keyword in (title + " " + link).lower()
+                for keyword in KEYWORDS
+            ):
+                continue
+
+            # केवल उसी वेबसाइट के लिंक स्वीकार करें।
+            source_host = source["url"].split("/")[2].lower()
+            link_host = (requests.utils.urlparse(link).hostname or "").lower()
+
+            if link_host != source_host:
+                continue
+
+            if link.rstrip("/") == source["url"].rstrip("/"):
+                continue
+
+            if link in sent_jobs:
+                continue
+
+            jobs.append({
+                "title": title,
+                "url": link,
+                "source": source["name"],
+            })
+
+    except requests.RequestException as error:
+        print(f"Website error [{source['name']}]: {error}")
+
+    return jobs
+
 
 def get_job():
     sent_jobs = load_sent_jobs()
-    job = fetch_from_sarkari_result_cm(sent_jobs)
-    if not job:
-        job = fetch_from_freejobalert(sent_jobs)
-    return job
+
+    for source in SOURCES:
+        jobs = fetch_jobs(source, sent_jobs)
+
+        if jobs:
+            return jobs[0]
+
+    return None
+
 
 def send_to_telegram(job):
-    message_text = f"""📣 <b>NEW JOB ALERT: सरकारी नौकरी की बड़ी भर्ती!</b> 📣
+    message = (
+        "📣 <b>सरकारी नौकरी अलर्ट</b> 📣\n\n"
+        f"🔹 <b>भर्ती / अपडेट:</b> {escape(job['title'])}\n"
+        f"📌 <b>स्रोत:</b> {escape(job['source'])}\n\n"
+        "🌐 <b>पूरी जानकारी के लिए:</b>\n"
+        f'👉 <a href="{escape(job["url"], quote=True)}">'
+        "यहाँ क्लिक करें</a>\n\n"
+        "⚠️ आवेदन से पहले आधिकारिक नोटिफिकेशन, "
+        "योग्यता और अंतिम तिथि जाँचें।"
+    )
 
-🔹 <b>पद/भर्ती का नाम:</b> {job['title']}
-📌 <b>अपडेट स्रोत:</b> {job['source']}
+    api_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
 
-🌐 <b>ऑनलाइन अप्लाई करने और पूरी डिटेल के लिए नीचे क्लिक करें:</b>
-👇👇👇
-👉 <a href="{job['url']}">ऑनलाइन अप्लाई और पूरी डिटेल लिंक</a>
-👉 <a href="https://sarkariresult.com.cm/">Sarkari Result Portal</a>
-👉 <a href="https://www.freejobalert.com/">FreeJobAlert Portal</a>"""
+    try:
+        response = requests.post(
+            api_url,
+            json={
+                "chat_id": CHAT_ID,
+                "text": message,
+                "parse_mode": "HTML",
+                "disable_web_page_preview": False,
+            },
+            timeout=20,
+        )
 
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    payload = {
-        "chat_id": CHAT_ID,
-        "text": message_text,
-        "parse_mode": "HTML",
-        "disable_web_page_preview": False
-    }
-    
-    resp = requests.post(url, json=payload)
-    print("Telegram Response Status:", resp.status_code)
-    print("Telegram Response Text:", resp.text)
-    return resp.status_code == 200
+        try:
+            result = response.json()
+        except ValueError:
+            print("Telegram ने मान्य JSON response नहीं दिया।")
+            return False
+
+        if response.ok and result.get("ok") is True:
+            print("Telegram पर संदेश सफलतापूर्वक भेजा गया।")
+            return True
+
+        print("Telegram API error:", result.get("description", "Unknown error"))
+        return False
+
+    except requests.RequestException as error:
+        print("Telegram network error:", error)
+        return False
+
 
 def main():
+    if not BOT_TOKEN.strip():
+        raise RuntimeError("GitHub Secret BOT_TOKEN खाली है।")
+
     job = get_job()
+
     if not job:
-        print("दोनों वेबसाइटों पर कोई नई अनपोस्टेड जॉब नहीं मिली।")
+        print("कोई नई matching job link नहीं मिली।")
         return
-        
-    print(f"नई जॉब मिली [{job['source']}]: {job['title']}")
-    success = send_to_telegram(job)
-    if success:
-        mark_job_as_sent(job['url'])
-        print("सफलतापूर्वक Telegram चैनल पर पोस्ट हो गया!")
+
+    print(f"नई matching link: {job['title']} [{job['source']}]")
+
+    if send_to_telegram(job):
+        mark_job_as_sent(job["url"])
+        print("लिंक sent_jobs.txt में सेव कर दी गई।")
     else:
-        print("Telegram पर भेजने में एरर आया।")
+        raise RuntimeError("Telegram पर संदेश भेजने में विफलता।")
+
 
 if __name__ == "__main__":
     main()
-  
-  
