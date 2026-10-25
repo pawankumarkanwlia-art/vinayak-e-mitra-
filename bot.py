@@ -4,7 +4,7 @@ from bs4 import BeautifulSoup
 
 HISTORY_FILE = "sent_jobs.txt"
 
-BOT_TOKEN = os.environ[8975425344:AAGudyiytDx_ftxIdW64KjLeOSRnjf_WUfI]
+BOT_TOKEN = os.environ[8975425344:AAGAZXxNazK_KMlIv1g88IV0RkKFyQ6UfrE]
 CHAT_ID = "@divyacybercafe"
 
 HEADERS = {
